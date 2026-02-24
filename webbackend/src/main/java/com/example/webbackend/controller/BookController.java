@@ -8,6 +8,13 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+// TO DO:
+// PUT endpoint (update book)
+// PATCH endpoint (partial update)
+// DELETE endpoint (remove book)
+// GET endpoint with pagination
+// Advanced GET endpoint with filtering, sorting, and pagination combined in the valid order
+
 @RestController
 @RequestMapping("/api")
 public class BookController {
@@ -58,9 +65,8 @@ public class BookController {
     // search by title
     @GetMapping("/books/search")
     public List<Book> searchByTitle(
-            @RequestParam(required = false, defaultValue = "") String title
-    ) {
-        if(title.isEmpty()) {
+            @RequestParam(required = false, defaultValue = "") String title) {
+        if (title.isEmpty()) {
             return books;
         }
 
@@ -74,8 +80,7 @@ public class BookController {
     @GetMapping("/books/price-range")
     public List<Book> getBooksByPrice(
             @RequestParam(required = false) Double minPrice,
-            @RequestParam(required = false) Double maxPrice
-    ) {
+            @RequestParam(required = false) Double maxPrice) {
         return books.stream()
                 .filter(book -> {
                     boolean min = minPrice == null || book.getPrice() >= minPrice;
@@ -89,31 +94,116 @@ public class BookController {
     @GetMapping("/books/sorted")
     public List<Book> getSortedBooks(
             @RequestParam(required = false, defaultValue = "title") String sortBy,
-            @RequestParam(required = false, defaultValue = "asc") String order
-    ){
+            @RequestParam(required = false, defaultValue = "asc") String order) {
         Comparator<Book> comparator;
 
-        switch(sortBy.toLowerCase()) {
+        switch (sortBy.toLowerCase()) {
             case "author":
                 comparator = Comparator.comparing(Book::getAuthor);
                 break;
-                case "title":
+            case "title":
                 comparator = Comparator.comparing(Book::getTitle);
             default:
                 comparator = Comparator.comparing(Book::getTitle);
                 break;
         }
 
-        if("desc".equalsIgnoreCase(order)) {
+        if ("desc".equalsIgnoreCase(order)) {
             comparator = comparator.reversed();
         }
 
         return books.stream().sorted(comparator)
                 .collect(Collectors.toList());
-
-
-
     }
 
+    // 1. PUT endpoint (update book)
+    @PutMapping("/books/{id}")
+    public Book updateBook(@PathVariable Long id, @RequestBody Book updatedBook) {
+        Book existing = books.stream()
+                .filter(book -> book.getId().equals(id))
+                .findFirst().orElse(null);
+
+        if (existing != null) {
+            existing.setTitle(updatedBook.getTitle());
+            existing.setAuthor(updatedBook.getAuthor());
+            existing.setPrice(updatedBook.getPrice());
+        }
+
+        return existing;
+    }
+
+    // 2. PATCH endpoint (partial update)
+    @PatchMapping("/books/{id}")
+    public Book partialUpdateBook(@PathVariable Long id, @RequestBody Book partialBook) {
+        Book existing = books.stream()
+                .filter(book -> book.getId().equals(id))
+                .findFirst().orElse(null);
+
+        if (existing != null) {
+            if (partialBook.getTitle() != null)
+                existing.setTitle(partialBook.getTitle());
+            if (partialBook.getAuthor() != null)
+                existing.setAuthor(partialBook.getAuthor());
+            if (partialBook.getPrice() != null)
+                existing.setPrice(partialBook.getPrice());
+        }
+
+        return existing;
+    }
+
+    // 3. DELETE endpoint (remove book)
+    @DeleteMapping("/books/{id}")
+    public boolean deleteBook(@PathVariable Long id) {
+        return books.removeIf(book -> book.getId().equals(id));
+    }
+
+    // 4. GET endpoint with pagination
+    @GetMapping("/books/page")
+    public List<Book> getBooksPaginated(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size) {
+        return books.stream()
+                .skip((long) page * size)
+                .limit(size)
+                .collect(Collectors.toList());
+    }
+
+    // 5. Advanced GET endpoint (filtering + sorting + pagination combined)
+    @GetMapping("/books/advanced")
+    public List<Book> getBooksAdvanced(
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(defaultValue = "title") String sortBy,
+            @RequestParam(defaultValue = "asc") String order,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size) {
+
+        Comparator<Book> comparator;
+        switch (sortBy.toLowerCase()) {
+            case "author":
+                comparator = Comparator.comparing(Book::getAuthor);
+                break;
+            case "title":
+            default:
+                comparator = Comparator.comparing(Book::getTitle);
+                break;
+        }
+
+        if ("desc".equalsIgnoreCase(order))
+            comparator = comparator.reversed();
+
+        return books.stream()
+                // Filtering
+                .filter(book -> (title == null || book.getTitle().toLowerCase().contains(title.toLowerCase())))
+                .filter(book -> (minPrice == null || book.getPrice() >= minPrice)
+                        && (maxPrice == null || book.getPrice() <= maxPrice))
+                // Sorting
+                .sorted(comparator)
+                // Pagination
+                .skip((long) page * size)
+                .limit(size)
+                .collect(Collectors.toList());
+    }
 
 }
